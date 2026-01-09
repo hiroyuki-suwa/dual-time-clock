@@ -1,0 +1,632 @@
+<!--
+  Dual Timezone Clock
+
+  A minimal, single-file dual-timezone clock designed for continuous display.
+  Features second-boundary synchronization and optional server-clock reference
+  via HTTP Date headers (e.g. Google Cloud Storage).
+
+  - Single HTML file (HTML + CSS + JavaScript)
+  - Primary / secondary timezone selection
+  - Second-boundary aligned updates (no drift)
+  - Optional server clock reference with automatic fallback
+  - Keyboard-first settings (press "S")
+  - Persistent settings via localStorage
+
+  This project was developed through an interactive design and engineering
+  process with ChatGPT 5.2, based on explicit functional and aesthetic
+  requirements.
+
+  License: MIT
+-->
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>Dual Timezone Clock</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        --bg: #000;
+        --fg: #fff; /* user-selectable */
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: Roboto, monospace, sans-serif;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 24px;
+        letter-spacing: 0.03em;
+      }
+
+      .wrap {
+        width: min(920px, 100%);
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .block {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .tz {
+        font-size: 0.95rem;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        margin-bottom: 8px;
+        opacity: 0.9;
+        text-transform: uppercase;
+        user-select: none;
+      }
+
+      .dateLine {
+        font-size: 2.2rem;
+        line-height: 1.1;
+        margin: 0;
+      }
+
+      .timeLine {
+        font-size: 3.4rem;
+        line-height: 1.1;
+        margin: 4px 0 0;
+      }
+
+      /* secondary (sub) */
+      .sub {
+        opacity: 0.7;
+      }
+      .sub .dateLine {
+        font-size: 1.9rem;
+      }
+      .sub .timeLine {
+        font-size: 2.6rem;
+      }
+
+      .meta {
+        margin-top: 12px;
+        width: min(920px, 100%);
+        text-align: center;
+        font-size: 0.9rem;
+        opacity: 0.5;
+        letter-spacing: 0.06em;
+        user-select: none;
+      }
+
+      /* settings button */
+      .settingsBtn {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        width: 40px;
+        height: 40px;
+        border: none;
+        background: transparent;
+        color: var(--fg);
+        opacity: 0.55;
+        font-size: 18px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .settingsBtn:hover {
+        opacity: 0.85;
+      }
+      .settingsBtn:focus-visible {
+        outline: 1px solid color-mix(in srgb, var(--fg) 35%, transparent);
+        outline-offset: 3px;
+      }
+
+      /* dialog */
+      dialog {
+        border: none;
+        padding: 0;
+        background: transparent;
+        color: var(--fg);
+      }
+      dialog::backdrop {
+        background: rgba(0, 0, 0, 0.75);
+      }
+
+      .dialogCard {
+        width: min(560px, calc(100vw - 24px));
+        background: #000;
+        color: var(--fg);
+        border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
+        border-radius: 14px;
+        padding: 18px;
+      }
+
+      .dialogTitle {
+        font-size: 1rem;
+        letter-spacing: 0.12em;
+        opacity: 0.9;
+        margin: 0 0 14px;
+        user-select: none;
+      }
+
+      .row {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+
+      label {
+        font-size: 0.85rem;
+        opacity: 0.75;
+        letter-spacing: 0.08em;
+        user-select: none;
+      }
+
+      select {
+        width: 100%;
+        background: #000;
+        color: var(--fg);
+        border: 1px solid color-mix(in srgb, var(--fg) 22%, transparent);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-family: Roboto, monospace, sans-serif;
+        font-size: 0.95rem;
+      }
+
+      .toggle {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 10px 0 14px;
+      }
+
+      input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--fg);
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
+      .btn {
+        border: 1px solid color-mix(in srgb, var(--fg) 22%, transparent);
+        background: #000;
+        color: var(--fg);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-family: Roboto, monospace, sans-serif;
+        font-size: 0.95rem;
+        cursor: pointer;
+        opacity: 0.9;
+      }
+      .btn:hover {
+        opacity: 1;
+      }
+
+      @media (max-width: 520px) {
+        .dateLine {
+          font-size: 1.7rem;
+        }
+        .timeLine {
+          font-size: 2.5rem;
+        }
+        .sub .dateLine {
+          font-size: 1.4rem;
+        }
+        .sub .timeLine {
+          font-size: 2rem;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <button class="settingsBtn" id="openSettings" aria-label="Open settings">
+      ⚙︎
+    </button>
+
+    <div class="wrap">
+      <section class="block main" id="mainBlock">
+        <div class="tz" id="mainTzLabel"></div>
+        <p class="dateLine" id="mainDate"></p>
+        <p class="timeLine" id="mainTime"></p>
+      </section>
+
+      <section class="block sub" id="subBlock">
+        <div class="tz" id="subTzLabel"></div>
+        <p class="dateLine" id="subDate"></p>
+        <p class="timeLine" id="subTime"></p>
+      </section>
+    </div>
+
+    <div class="meta" id="meta"></div>
+
+    <dialog id="settingsDialog">
+      <div class="dialogCard">
+        <p class="dialogTitle">SETTINGS</p>
+
+        <div class="row">
+          <label for="mainTz">PRIMARY TIMEZONE</label>
+          <select id="mainTz"></select>
+        </div>
+
+        <div class="toggle">
+          <input type="checkbox" id="showSub" />
+          <label for="showSub">SHOW SECONDARY</label>
+        </div>
+
+        <div class="row" id="subRow">
+          <label for="subTz">SECONDARY TIMEZONE</label>
+          <select id="subTz"></select>
+        </div>
+
+        <div class="row">
+          <label for="textColor">TEXT COLOR</label>
+          <select id="textColor"></select>
+        </div>
+
+        <div class="actions">
+          <button class="btn" id="cancelBtn" type="button">CANCEL</button>
+          <button class="btn" id="saveBtn" type="button">SAVE</button>
+        </div>
+      </div>
+    </dialog>
+
+    <script>
+      // =========================
+      // time source sync (server Date header)
+      // =========================
+      let timeOffsetMs = 0;
+      let usingServerTime = false;
+
+      function nowSyncedMs() {
+        return Date.now() + timeOffsetMs;
+      }
+
+      function updateMeta() {
+        document.getElementById("meta").textContent = usingServerTime
+          ? "time source: server clock"
+          : "time source: device clock";
+      }
+
+      async function syncWithServerDate() {
+        try {
+          const url = new URL(location.href);
+          url.searchParams.set("t", String(Date.now())); // cache-bust
+
+          const t0 = Date.now();
+          const res = await fetch(url.toString(), {
+            method: "HEAD",
+            cache: "no-store",
+          });
+          const t1 = Date.now();
+
+          const dateHeader = res.headers.get("Date");
+          if (!dateHeader) {
+            usingServerTime = false;
+            updateMeta();
+            return;
+          }
+
+          const serverMs = new Date(dateHeader).getTime();
+          const rtt = t1 - t0;
+          const estimatedNowMs = serverMs + rtt / 2;
+
+          timeOffsetMs = estimatedNowMs - t1;
+          usingServerTime = true;
+          updateMeta();
+        } catch {
+          usingServerTime = false;
+          updateMeta();
+        }
+      }
+
+      // =========================
+      // formatting (Intl) - no parse roundtrip
+      // =========================
+      const fmtCache = new Map();
+
+      function getFormatters(timeZone) {
+        if (fmtCache.has(timeZone)) return fmtCache.get(timeZone);
+
+        const dateFmt = new Intl.DateTimeFormat("en-US", {
+          timeZone,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        });
+
+        const timeFmt = new Intl.DateTimeFormat("en-US", {
+          timeZone,
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        });
+
+        const pack = { dateFmt, timeFmt };
+        fmtCache.set(timeZone, pack);
+        return pack;
+      }
+
+      function pad2(x) {
+        return String(x).padStart(2, "0");
+      }
+
+      function formatLines(epochMs, timeZone) {
+        const d = new Date(epochMs);
+        const { dateFmt, timeFmt } = getFormatters(timeZone);
+
+        const dp = dateFmt.formatToParts(d);
+        const tp = timeFmt.formatToParts(d);
+
+        const year = dp.find((p) => p.type === "year")?.value ?? "0000";
+        const month = dp.find((p) => p.type === "month")?.value ?? "00";
+        const day = dp.find((p) => p.type === "day")?.value ?? "00";
+
+        const hour = tp.find((p) => p.type === "hour")?.value ?? "00";
+        const minute = tp.find((p) => p.type === "minute")?.value ?? "00";
+        const second = tp.find((p) => p.type === "second")?.value ?? "00";
+
+        return {
+          dateLine: `${year}.${month}.${day}`,
+          timeLine: `${pad2(hour)}:${pad2(minute)}:${pad2(second)}`,
+        };
+      }
+
+      // =========================
+      // settings
+      // =========================
+      const STORAGE_KEY = "dual-tz-clock-settings-v2";
+
+      const MATERIAL_TEXT_COLORS = [
+        { id: "white", label: "White", value: "#FFFFFF" },
+        { id: "red", label: "Red", value: "#EF5350" },
+        { id: "orange", label: "Orange", value: "#FF7043" },
+        { id: "yellow", label: "Yellow", value: "#FFCA28" },
+        { id: "green", label: "Green", value: "#66BB6A" },
+        { id: "teal", label: "Teal", value: "#26A69A" },
+        { id: "blue", label: "Blue", value: "#42A5F5" },
+        { id: "purple", label: "Purple", value: "#AB47BC" },
+      ];
+
+      const DEFAULT_SETTINGS = {
+        mainTz: "Asia/Tokyo",
+        subTz: "UTC",
+        showSub: true,
+        textColor: "#FFFFFF",
+      };
+
+      let settings = { ...DEFAULT_SETTINGS };
+
+      function loadSettings() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+          settings = { ...DEFAULT_SETTINGS, ...parsed };
+        } catch {
+          settings = { ...DEFAULT_SETTINGS };
+        }
+      }
+
+      function saveSettings() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      }
+
+      function applyTheme() {
+        document.documentElement.style.setProperty("--fg", settings.textColor);
+      }
+
+      function shortLabel(tz) {
+        if (tz === "UTC") return "UTC";
+        if (tz === "Asia/Tokyo") return "JST";
+        return tz;
+      }
+
+      function applySettingsToUI() {
+        document.getElementById("mainTzLabel").textContent = shortLabel(
+          settings.mainTz
+        );
+        document.getElementById("subTzLabel").textContent = shortLabel(
+          settings.subTz
+        );
+
+        const subBlock = document.getElementById("subBlock");
+        subBlock.style.display = settings.showSub ? "" : "none";
+
+        applyTheme();
+      }
+
+      function getTimeZoneList() {
+        // Always include "UTC"
+        const base = [];
+
+        try {
+          if (typeof Intl.supportedValuesOf === "function") {
+            const list = Intl.supportedValuesOf("timeZone");
+            if (Array.isArray(list) && list.length > 0) {
+              // list does not include "UTC" in many environments, so we add it manually
+              return ["UTC", ...list.filter((z) => z !== "UTC")];
+            }
+          }
+        } catch {}
+
+        // Curated fallback
+        return [
+          "UTC",
+          "Asia/Tokyo",
+          "Asia/Seoul",
+          "Asia/Shanghai",
+          "Asia/Singapore",
+          "Asia/Kolkata",
+          "Europe/London",
+          "Europe/Paris",
+          "Europe/Berlin",
+          "America/New_York",
+          "America/Chicago",
+          "America/Denver",
+          "America/Los_Angeles",
+          "Australia/Sydney",
+        ];
+      }
+
+      function fillSelect(selectEl, values) {
+        selectEl.innerHTML = "";
+        for (const v of values) {
+          const opt = document.createElement("option");
+          opt.value = v.value ?? v;
+          opt.textContent = v.label ?? v;
+          selectEl.appendChild(opt);
+        }
+      }
+
+      function setSecondaryRowVisibility(show) {
+        const subRow = document.getElementById("subRow");
+        subRow.style.display = show ? "" : "none";
+      }
+
+      // =========================
+      // render loop (second-boundary synced)
+      // =========================
+      function updateClocks() {
+        const ms = nowSyncedMs();
+
+        const main = formatLines(ms, settings.mainTz);
+        document.getElementById("mainDate").textContent = main.dateLine;
+        document.getElementById("mainTime").textContent = main.timeLine;
+
+        if (settings.showSub) {
+          const sub = formatLines(ms, settings.subTz);
+          document.getElementById("subDate").textContent = sub.dateLine;
+          document.getElementById("subTime").textContent = sub.timeLine;
+        }
+      }
+
+      function startBoundarySyncedLoop() {
+        function tick() {
+          updateClocks();
+          const now = Date.now();
+          const delay = 1000 - (now % 1000);
+          setTimeout(tick, delay);
+        }
+        tick();
+      }
+
+      // =========================
+      // init
+      // =========================
+      (async function main() {
+        loadSettings();
+        applySettingsToUI();
+        updateMeta();
+
+        // setup dialog
+        const dialog = document.getElementById("settingsDialog");
+        const mainSel = document.getElementById("mainTz");
+        const subSel = document.getElementById("subTz");
+        const showSubEl = document.getElementById("showSub");
+        const colorSel = document.getElementById("textColor");
+
+        const tzList = getTimeZoneList();
+        fillSelect(mainSel, tzList);
+        fillSelect(subSel, tzList);
+        fillSelect(colorSel, MATERIAL_TEXT_COLORS);
+
+        function syncDialogFromSettings() {
+          mainSel.value = settings.mainTz;
+          subSel.value = settings.subTz;
+          showSubEl.checked = settings.showSub;
+          colorSel.value = settings.textColor;
+
+          setSecondaryRowVisibility(settings.showSub);
+        }
+
+        function commitDialogToSettings() {
+          settings.mainTz = mainSel.value;
+          settings.subTz = subSel.value;
+          settings.showSub = showSubEl.checked;
+          settings.textColor = colorSel.value;
+
+          saveSettings();
+          applySettingsToUI();
+          updateClocks();
+        }
+
+        function openSettings() {
+          if (dialog.open) return;
+          syncDialogFromSettings();
+          dialog.showModal();
+        }
+
+        document
+          .getElementById("openSettings")
+          .addEventListener("click", () => {
+            openSettings();
+          });
+
+        // Keyboard shortcut: S to open settings (ignore when typing in inputs/dialog)
+        window.addEventListener("keydown", (e) => {
+          if (e.key !== "s" && e.key !== "S") return;
+
+          const t = e.target;
+          const isTypingTarget =
+            t &&
+            (t.tagName === "INPUT" ||
+              t.tagName === "TEXTAREA" ||
+              t.tagName === "SELECT" ||
+              t.isContentEditable);
+
+          if (isTypingTarget) return;
+
+          // If dialog is open, let S behave normally inside it
+          if (dialog.open) return;
+
+          e.preventDefault();
+          openSettings();
+        });
+
+        document.getElementById("cancelBtn").addEventListener("click", () => {
+          dialog.close();
+        });
+
+        document.getElementById("saveBtn").addEventListener("click", () => {
+          commitDialogToSettings();
+          dialog.close();
+        });
+
+        // Backdrop click to close
+        dialog.addEventListener("click", (e) => {
+          const card = dialog.querySelector(".dialogCard");
+          if (!card.contains(e.target)) dialog.close();
+        });
+
+        // Secondary select show/hide in dialog (live)
+        showSubEl.addEventListener("change", () => {
+          setSecondaryRowVisibility(showSubEl.checked);
+        });
+
+        // initial
+        setSecondaryRowVisibility(settings.showSub);
+
+        await syncWithServerDate();
+        updateClocks();
+        startBoundarySyncedLoop();
+
+        // resync time source occasionally
+        setInterval(syncWithServerDate, 5 * 60 * 1000);
+      })();
+    </script>
+  </body>
+</html>
