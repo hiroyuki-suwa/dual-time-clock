@@ -575,6 +575,8 @@
         document.getElementById("mainDate").textContent = main.dateLine;
         document.getElementById("mainTime").textContent = main.timeLine;
 
+        document.title = `${shortLabel(settings.mainTz)} ${main.timeLine}`;
+
         if (settings.showSub) {
           const sub = formatLines(ms, settings.subTz);
           document.getElementById("subDate").textContent = sub.dateLine;
