@@ -91,6 +91,8 @@
         --bg: #000;
         --fg: #fff; /* user-selectable */
         --scale: 1; /* font scale: 1 (small), 2 (medium), 3 (large) */
+        --font-family: "Open Sans", sans-serif;
+        --font-weight: 400;
       }
 
       * {
@@ -102,7 +104,8 @@
         min-height: 100vh;
         background: var(--bg);
         color: var(--fg);
-        font-family: Roboto, monospace, sans-serif;
+        font-family: var(--font-family);
+        font-weight: var(--font-weight);
         display: flex;
         flex-direction: column;
         justify-content: center;
@@ -375,6 +378,16 @@
         </div>
 
         <div class="row">
+          <label for="fontFamily">FONT FAMILY</label>
+          <select id="fontFamily"></select>
+        </div>
+
+        <div class="row">
+          <label for="fontWeight">FONT WEIGHT</label>
+          <select id="fontWeight"></select>
+        </div>
+
+        <div class="row">
           <label for="textColor">TEXT COLOR</label>
           <select id="textColor"></select>
         </div>
@@ -495,6 +508,34 @@
       // =========================
       const STORAGE_KEY = "dual-tz-clock-settings-v2";
 
+      const FONT_CATALOG = [
+        "Arimo",
+        "Cinzel",
+        "EB Garamond",
+        "Hind",
+        "Jost",
+        "Lato",
+        "Libre Baskerville",
+        "Montserrat",
+        "Open Sans",
+        "Questrial",
+        "Roboto",
+      ];
+
+      const FONT_WEIGHTS = {
+        Arimo: [400, 700],
+        Cinzel: [400, 700],
+        "EB Garamond": [400, 500, 600],
+        Hind: [400, 600],
+        Jost: [400, 500, 600],
+        Lato: [400, 700],
+        "Libre Baskerville": [400, 700],
+        Montserrat: [400, 600, 700],
+        "Open Sans": [400, 600, 700],
+        Questrial: [400],
+        Roboto: [400, 500, 700],
+      };
+
       const MATERIAL_TEXT_COLORS = [
         { id: "white", label: "White", value: "#FFFFFF" },
         { id: "red", label: "Red", value: "#EF5350" },
@@ -511,6 +552,8 @@
         subTz: "UTC",
         showSub: true,
         fontSize: "small", // small | medium | large
+        fontFamily: "Open Sans",
+        fontWeight: 400,
         textColor: "#FFFFFF",
       };
 
@@ -542,6 +585,38 @@
         document.documentElement.style.setProperty("--scale", scale);
       }
 
+      function loadGoogleFont(fontFamily, weights) {
+        const id = `gf-${fontFamily.replace(/\s+/g, "-")}`;
+        if (document.getElementById(id)) return;
+
+        const w = weights.join(";");
+        const href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(
+          fontFamily,
+        )}:wght@${w}&display=swap`;
+
+        const link = document.createElement("link");
+        link.id = id;
+        link.rel = "stylesheet";
+        link.href = href;
+        document.head.appendChild(link);
+      }
+
+      function applyFontSettings() {
+        const family = settings.fontFamily;
+        const weights = FONT_WEIGHTS[family] || [400];
+
+        loadGoogleFont(family, weights);
+
+        document.documentElement.style.setProperty(
+          "--font-family",
+          `'${family}', sans-serif`,
+        );
+        document.documentElement.style.setProperty(
+          "--font-weight",
+          settings.fontWeight,
+        );
+      }
+
       function applyTheme() {
         document.documentElement.style.setProperty("--fg", settings.textColor);
       }
@@ -564,6 +639,7 @@
         subBlock.style.display = settings.showSub ? "" : "none";
 
         applyFontScale();
+        applyFontSettings();
         applyTheme();
       }
 
@@ -658,6 +734,8 @@
         const subSel = document.getElementById("subTz");
         const showSubEl = document.getElementById("showSub");
         const fontSizeSel = document.getElementById("fontSize");
+        const fontFamilySel = document.getElementById("fontFamily");
+        const fontWeightSel = document.getElementById("fontWeight");
         const colorSel = document.getElementById("textColor");
 
         const tzList = getTimeZoneList();
@@ -670,6 +748,13 @@
           subSel.value = settings.subTz;
           showSubEl.checked = settings.showSub;
           fontSizeSel.value = settings.fontSize;
+          fontFamilySel.value = settings.fontFamily;
+          updateFontWeightOptions(settings.fontFamily);
+          fontWeightSel.value = String(settings.fontWeight);
+          if (fontWeightSel.value !== String(settings.fontWeight)) {
+            // fallback to the first available weight
+            fontWeightSel.value = fontWeightSel.options[0]?.value ?? "400";
+          }
           colorSel.value = settings.textColor;
 
           setSecondaryRowVisibility(settings.showSub);
@@ -680,6 +765,8 @@
           settings.subTz = subSel.value;
           settings.showSub = showSubEl.checked;
           settings.fontSize = fontSizeSel.value;
+          settings.fontFamily = fontFamilySel.value;
+          settings.fontWeight = Number(fontWeightSel.value);
           settings.textColor = colorSel.value;
 
           saveSettings();
@@ -794,7 +881,37 @@
           toggleFullscreen();
         });
 
+        fontFamilySel.addEventListener("change", () => {
+          updateFontWeightOptions(fontFamilySel.value);
+        });
+
+        function initFontSelectors() {
+          // family
+          fontFamilySel.innerHTML = "";
+          FONT_CATALOG.forEach((f) => {
+            const opt = document.createElement("option");
+            opt.value = f;
+            opt.textContent = f;
+            fontFamilySel.appendChild(opt);
+          });
+
+          updateFontWeightOptions(fontFamilySel.value);
+        }
+
+        function updateFontWeightOptions(family) {
+          const weights = FONT_WEIGHTS[family] || [400];
+
+          fontWeightSel.innerHTML = "";
+          weights.forEach((w) => {
+            const opt = document.createElement("option");
+            opt.value = w;
+            opt.textContent = w;
+            fontWeightSel.appendChild(opt);
+          });
+        }
+
         // initial
+        initFontSelectors();
         setSecondaryRowVisibility(settings.showSub);
 
         await syncWithServerDate();
