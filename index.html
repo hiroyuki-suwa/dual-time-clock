@@ -412,7 +412,9 @@
             return;
           }
 
-          const serverMs = new Date(dateHeader).getTime();
+          // HTTP Date header is second-precision (no milliseconds).
+          // Adding 500ms reduces the systematic "almost 1s late" feel caused by truncation to .000.
+          const serverMs = new Date(dateHeader).getTime() + 500;
           const rtt = t1 - t0;
           const estimatedNowMs = serverMs + rtt / 2;
 
@@ -612,7 +614,7 @@
       function startBoundarySyncedLoop() {
         function tick() {
           updateClocks();
-          const now = Date.now();
+          const now = nowSyncedMs();
           const delay = 1000 - (now % 1000);
           setTimeout(tick, delay);
         }
