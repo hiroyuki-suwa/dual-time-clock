@@ -90,6 +90,7 @@
       :root {
         --bg: #000;
         --fg: #fff; /* user-selectable */
+        --scale: 1; /* font scale: 1 (small), 2 (medium), 3 (large) */
       }
 
       * {
@@ -134,13 +135,13 @@
       }
 
       .dateLine {
-        font-size: 2.2rem;
+        font-size: calc(2.2rem * var(--scale));
         line-height: 1.1;
         margin: 0;
       }
 
       .timeLine {
-        font-size: 3.4rem;
+        font-size: calc(3.4rem * var(--scale));
         line-height: 1.1;
         margin: 4px 0 0;
       }
@@ -150,10 +151,10 @@
         opacity: 0.7;
       }
       .sub .dateLine {
-        font-size: 1.9rem;
+        font-size: calc(1.9rem * var(--scale));
       }
       .sub .timeLine {
-        font-size: 2.6rem;
+        font-size: calc(2.6rem * var(--scale));
       }
 
       .meta {
@@ -365,6 +366,15 @@
         </div>
 
         <div class="row">
+          <label for="fontSize">FONT SIZE</label>
+          <select id="fontSize">
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+          </select>
+        </div>
+
+        <div class="row">
           <label for="textColor">TEXT COLOR</label>
           <select id="textColor"></select>
         </div>
@@ -501,6 +511,7 @@
         subTz: "UTC",
         showSub: true,
         textColor: "#FFFFFF",
+        fontSize: "small", // small | medium | large
       };
 
       let settings = { ...DEFAULT_SETTINGS };
@@ -518,6 +529,17 @@
 
       function saveSettings() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      }
+
+      function applyFontScale() {
+        const scale =
+          settings.fontSize === "medium"
+            ? 2
+            : settings.fontSize === "large"
+              ? 3
+              : 1;
+
+        document.documentElement.style.setProperty("--scale", scale);
       }
 
       function applyTheme() {
@@ -541,6 +563,7 @@
         const subBlock = document.getElementById("subBlock");
         subBlock.style.display = settings.showSub ? "" : "none";
 
+        applyFontScale();
         applyTheme();
       }
 
@@ -634,6 +657,7 @@
         const mainSel = document.getElementById("mainTz");
         const subSel = document.getElementById("subTz");
         const showSubEl = document.getElementById("showSub");
+        const fontSizeSel = document.getElementById("fontSize");
         const colorSel = document.getElementById("textColor");
 
         const tzList = getTimeZoneList();
@@ -645,6 +669,7 @@
           mainSel.value = settings.mainTz;
           subSel.value = settings.subTz;
           showSubEl.checked = settings.showSub;
+          fontSizeSel.value = settings.fontSize;
           colorSel.value = settings.textColor;
 
           setSecondaryRowVisibility(settings.showSub);
@@ -654,6 +679,7 @@
           settings.mainTz = mainSel.value;
           settings.subTz = subSel.value;
           settings.showSub = showSubEl.checked;
+          settings.fontSize = fontSizeSel.value;
           settings.textColor = colorSel.value;
 
           saveSettings();
