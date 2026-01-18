@@ -18,7 +18,7 @@
 
   License: MIT
 -->
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
@@ -510,8 +510,8 @@
         mainTz: "Asia/Tokyo",
         subTz: "UTC",
         showSub: true,
-        textColor: "#FFFFFF",
         fontSize: "small", // small | medium | large
+        textColor: "#FFFFFF",
       };
 
       let settings = { ...DEFAULT_SETTINGS };
@@ -554,10 +554,10 @@
 
       function applySettingsToUI() {
         document.getElementById("mainTzLabel").textContent = shortLabel(
-          settings.mainTz
+          settings.mainTz,
         );
         document.getElementById("subTzLabel").textContent = shortLabel(
-          settings.subTz
+          settings.subTz,
         );
 
         const subBlock = document.getElementById("subBlock");
